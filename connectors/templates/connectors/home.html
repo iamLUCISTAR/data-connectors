@@ -1,0 +1,19 @@
+<!-- google_sheets/templates/google_sheets/home.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+</head>
+<body>
+    <h1>Welcome, {{ user.username }}!</h1>
+    <h2>Your Google Sheets:</h2>
+    <a href="{% url 'google-auth' %}">Link Google Account</a>
+    <ul>
+        <li><a href="{% url 'google-sheets' %}">View Sheets</a></li>
+    </ul>
+    <p><a href="{% url 'logout' %}">Logout</a></p>
+</body>
+</html>
