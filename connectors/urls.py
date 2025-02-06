@@ -17,5 +17,6 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 
     # Home page (protected page, user must be logged in)
-    path('', views.HomePageView.as_view(), name='home'),  # Home page for authenticated users
+    path('', views.LandingPageView.as_view(), name='landing'),  # Home page for authenticated users
+    path('google/', views.GooglePageView.as_view(), name='google'),  # Home page for authenticated users
 ]

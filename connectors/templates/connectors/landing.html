@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to the Application</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        .nav-links {
+            margin-top: 20px;
+        }
+        .nav-links a {
+            display: block;
+            padding: 10px;
+            margin: 10px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .nav-links a:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Welcome to Our Application</h1>
+        <p>This application allows you to connect and manage various data sources seamlessly.</p>
+
+        <div class="nav-links">
+            <a href="{% url 'google' %}">Connect Google Sheets</a>
+            <a href="#">[Future Connection 1]</a>
+            <a href="#">[Future Connection 2]</a>
+        </div>
+    </div>
+
+</body>
+</html>

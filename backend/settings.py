@@ -152,7 +152,7 @@ GOOGLE_OAUTH_TOKEN_URI = 'https://oauth2.googleapis.com/token'
 GOOGLE_OAUTH_CLIENT_ID = '815284448432-fp5a4v84eu7r0m2q07rv0ctshqcp806k.apps.googleusercontent.com'
 GOOGLE_OAUTH_CLIENT_SECRET = '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'
 
-LOGIN_REDIRECT_URL = 'home'
+LOGIN_REDIRECT_URL = 'landing'
 LOGIN_URL = '/api/login/'
 LOGOUT_REDIRECT_URL = 'login'
 
