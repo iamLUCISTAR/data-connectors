@@ -153,7 +153,9 @@ GOOGLE_OAUTH_CLIENT_ID = '815284448432-fp5a4v84eu7r0m2q07rv0ctshqcp806k.apps.goo
 GOOGLE_OAUTH_CLIENT_SECRET = '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'
 
 LOGIN_REDIRECT_URL = 'home'
-LOGOUT_REDIRECT_URL = '/login'
+LOGIN_URL = '/api/login/'
+LOGOUT_REDIRECT_URL = 'login'
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 

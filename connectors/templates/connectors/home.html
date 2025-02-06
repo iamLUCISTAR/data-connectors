@@ -14,6 +14,9 @@
     <ul>
         <li><a href="{% url 'google-sheets' %}">View Sheets</a></li>
     </ul>
-    <p><a href="{% url 'logout' %}">Logout</a></p>
+    <form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <button type="submit">Logout</button>
+    </form>
 </body>
 </html>

@@ -1,6 +1,7 @@
 # google_sheets/views.py
 from datetime import timedelta
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, redirect
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login, authenticate
@@ -33,7 +34,8 @@ class SignUpView(TemplateView):
             return redirect('home')  # Redirect to the home page after signup
         return render(request, self.template_name, {'form': form})
 
-class HomePageView(TemplateView):
+
+class HomePageView(LoginRequiredMixin, TemplateView):
     template_name = 'connectors/home.html'
 
     def get_context_data(self, **kwargs):
