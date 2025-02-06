@@ -1,22 +1,155 @@
-<!-- google_sheets/templates/google_sheets/home.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home</title>
+    <script>
+        // Function to open the Google authentication popup
+        async function openGoogleAuthPopup() {
+            try {
+                let response = await fetch("{% url 'google-auth' %}", {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": "{{ csrf_token }}"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed to get authentication URL");
+                }
+
+                let data = await response.json();
+                let authUrl = data.auth_url;
+
+                let popup = window.open(authUrl, "_blank", "width=500,height=600");
+
+                if (!popup) {
+                    alert("Please allow pop-ups to authenticate with Google.");
+                }
+
+                // Check for popup closure and authentication success
+                let popupCheckInterval = setInterval(() => {
+                    if (popup.closed) {
+                        clearInterval(popupCheckInterval);
+                        checkAuthStatus();
+                    }
+                }, 500);
+
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Failed to start Google authentication.");
+            }
+        }
+
+        // Function to check authentication status
+        async function checkAuthStatus() {
+            try {
+                let response = await fetch("{% url 'google-sheets' %}");
+                if (response.ok) {
+                    alert("Google authentication successful!");
+                    document.getElementById("view-sheets").style.display = "block";
+                    fetchSheets();  // Fetch sheets after successful authentication
+                } else {
+                    alert("Google authentication failed. Please try again.");
+                }
+            } catch (error) {
+                console.error("Error checking auth status:", error);
+            }
+        }
+
+        // Function to fetch the list of Google Sheets from the backend
+        async function fetchSheets() {
+            try {
+                let response = await fetch("{% url 'google-sheets' %}");
+                let data = await response.json();
+
+                if (data.sheets) {
+                    let dropdown = document.getElementById("sheets-dropdown");
+                    dropdown.innerHTML = "";  // Clear previous options
+
+                    // Add a default option
+                    let defaultOption = document.createElement("option");
+                    defaultOption.textContent = "Select a Sheet";
+                    dropdown.appendChild(defaultOption);
+
+                    // Populate the dropdown with sheets data
+                    data.sheets.forEach(sheet => {
+                        let option = document.createElement("option");
+                        option.value = sheet.sheet_id;
+                        option.textContent = sheet.title;
+                        dropdown.appendChild(option);
+                    });
+
+                    // Show the dropdown if it's not already visible
+                    dropdown.style.display = "block";
+                    document.getElementById("fetch-data-btn").style.display = "block";
+                } else {
+                    alert("No sheets found.");
+                }
+            } catch (error) {
+                console.error("Error fetching sheets:", error);
+            }
+        }
+
+        // Function to fetch data from the selected sheet
+        async function fetchSheetData() {
+            let sheetId = document.getElementById("sheets-dropdown").value;
+            if (!sheetId) {
+                alert("Please select a sheet first.");
+                return;
+            }
+
+            try {
+                let response = await fetch(`{% url 'google-sheet-data' %}?spreadsheet_id=${sheetId}`);
+                let data = await response.json();
+
+                if (data.data) {
+                    let sheetDataDiv = document.getElementById("sheet-data");
+                    sheetDataDiv.innerHTML = "";  // Clear previous data
+
+                    // Display the fetched data
+                    data.data.forEach(row => {
+                        let rowDiv = document.createElement("div");
+                        rowDiv.textContent = row.join(", ");
+                        sheetDataDiv.appendChild(rowDiv);
+                    });
+                } else {
+                    alert("No data found in the selected sheet.");
+                }
+            } catch (error) {
+                console.error("Error fetching sheet data:", error);
+            }
+        }
+    </script>
 </head>
 <body>
     <h1>Welcome, {{ user.username }}!</h1>
     <h2>Your Google Sheets:</h2>
-    <a href="{% url 'google-auth' %}">Link Google Account</a>
-    <ul>
+
+    <!-- Button to link Google Account -->
+    <button onclick="openGoogleAuthPopup()">Link Google Account</button>
+
+    <!-- List of sheets (Initially hidden) -->
+    <ul id="view-sheets" style="display: {% if user.google_access_token %}block{% else %}none{% endif %};">
         <li><a href="{% url 'google-sheets' %}">View Sheets</a></li>
     </ul>
+
+    <!-- Dropdown to select a sheet (Initially hidden) -->
+    <select id="sheets-dropdown" style="display: none;" onchange="fetchSheetData()">
+        <option>Select a sheet</option>
+    </select>
+
+    <!-- Button to fetch data from the selected sheet -->
+    <button id="fetch-data-btn" style="display: none;" onclick="fetchSheetData()">Fetch Data</button>
+
+    <!-- Form to log out -->
     <form method="post" action="{% url 'logout' %}">
-    {% csrf_token %}
-    <button type="submit">Logout</button>
+        {% csrf_token %}
+        <button type="submit">Logout</button>
     </form>
+
+    <div id="sheet-data"></div> <!-- Placeholder for showing fetched sheet data -->
 </body>
 </html>

@@ -9,6 +9,8 @@ urlpatterns = [
     path('google-auth/', views.GoogleAuthView.as_view(), name='google-auth'),
     path('google-sheets/', views.GoogleSheetsView.as_view(), name='google-sheets'),
     path('google/callback/', views.GoogleAuthCallbackView.as_view(), name='google-callback'),
+    path('google-sheet-data/', views.GoogleSheetDataView.as_view(), name='google-sheet-data'),
+
     # User Authentication URLs (Login, Signup)
     path('login/', auth_views.LoginView.as_view(), name='login'),
     path('signup/', views.SignUpView.as_view(), name='signup'),

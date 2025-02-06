@@ -1,6 +1,12 @@
 # google_sheets/views.py
 from datetime import timedelta
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from django.utils import timezone
 
+from django.conf import settings
+from django.http import HttpResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, redirect
 from django.contrib.auth.forms import UserCreationForm
@@ -9,6 +15,7 @@ from django.utils.timezone import now
 from django.views.generic import TemplateView
 from django.contrib.auth.decorators import login_required
 from googleapiclient.errors import HttpError
+from rest_framework.exceptions import server_error
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -57,17 +64,29 @@ class GoogleAuthCallbackView(APIView):
 
     def get(self, request):
         auth_code = request.GET.get("code")
+
+        # Use the auth code to get credentials
         creds = get_google_credentials(auth_code, request)
 
+        if creds is None:
+            return HttpResponse("Authentication failed.", status=400)
         user = request.user
-        user.google_access_token = creds.token
-        user.google_refresh_token = creds.refresh_token
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            user.google_access_token = creds.token
+            user.google_refresh_token = creds.refresh_token
+            user.google_token_expiry = timezone.make_aware(creds.expiry)
+            user.save()
 
-        # Ensure creds.expiry is a datetime object and add a timedelta to current time.
-        user.google_token_expiry = creds.expiry
-        user.save()
-
-        return redirect('home')  # Redirect to home after successful login
+        # Return a response that closes the popup and sends success message to parent window
+        html_content = """
+        <script>
+            window.opener.postMessage("google-auth-success", "*");
+            window.close(); // Close the popup
+        </script>
+        <p>Authentication successful! You can now close this window.</p>
+        """
+        return HttpResponse(html_content)
 
 class GoogleSheetsView(APIView):
     """Fetches list of Google Sheets available for the user."""
@@ -76,24 +95,89 @@ class GoogleSheetsView(APIView):
 
     def get(self, request):
         user = request.user
-        creds = get_google_credentials(user)
 
-        if not creds:
+        # Ensure the user has stored tokens
+        if not user.google_access_token or not user.google_refresh_token or not user.google_token_expiry:
             return Response({"error": "Google authentication required."}, status=401)
 
+        # Refresh token logic (if token expired)
+        if user.google_token_expiry <= now():
+            return Response({"error": "Google token expired. Please re-authenticate."}, status=401)
+
+        # Load credentials from user model
+        creds = Credentials(
+            token=user.google_access_token,
+            refresh_token=user.google_refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
+            client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET
+        )
+
         try:
-            service = build("sheets", "v4", credentials=creds)
+            service = build("drive", "v3", credentials=creds)  # Use Google Drive API to list files
             sheet_list = []
 
-            results = service.spreadsheets().get(spreadsheetId="your-spreadsheet-id").execute()
-            sheets = results.get("sheets", [])
-            for sheet in sheets:
+            # List all files (including spreadsheets) in the user's Google Drive
+            results = service.files().list(q="mimeType='application/vnd.google-apps.spreadsheet'",
+                                           fields="files(id, name)").execute()
+            files = results.get("files", [])
+
+            for file in files:
                 sheet_list.append({
-                    "title": sheet["properties"]["title"],
-                    "sheet_id": sheet["properties"]["sheetId"]
+                    "sheet_id": file["id"],
+                    "title": file["name"]
                 })
 
             return Response({"sheets": sheet_list})
+
+        except HttpError as err:
+            return Response({"error": str(err)}, status=400)
+
+
+class GoogleSheetDataView(APIView):
+    """Fetches data from the selected Google Sheet."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Get the selected spreadsheet_id from the query params
+        spreadsheet_id = request.GET.get("spreadsheet_id")
+
+        # Ensure the user has stored tokens
+        user = request.user
+        if not user.google_access_token or not user.google_refresh_token or not user.google_token_expiry:
+            return Response({"error": "Google authentication required."}, status=401)
+
+        # Refresh token logic (if token expired)
+        if user.google_token_expiry <= now():
+            return Response({"error": "Google token expired. Please re-authenticate."}, status=401)
+
+        # Load credentials from user model
+        creds = Credentials(
+            token=user.google_access_token,
+            refresh_token=user.google_refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
+            client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET
+        )
+
+        try:
+            # Build the Sheets API service
+            sheets_service = build("sheets", "v4", credentials=creds)
+
+            # Fetch data from the specified Google Sheet
+            range_ = "Sheet1"  # You can modify this if you want specific range like "Sheet1!A1:Z100"
+            result = sheets_service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id, range=range_
+            ).execute()
+            rows = result.get("values", [])
+
+            # If the sheet is empty
+            if not rows:
+                return Response({"message": "No data found in the selected sheet."})
+
+            # Return the rows in the sheet
+            return Response({"data": rows})
 
         except HttpError as err:
             return Response({"error": str(err)}, status=400)
