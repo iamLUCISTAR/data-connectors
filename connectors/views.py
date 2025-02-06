@@ -59,6 +59,9 @@ class GoogleAuthView(APIView):
         auth_url = get_google_auth_url(request)
         return Response({"auth_url": auth_url})
 
+from django.shortcuts import redirect
+from django.contrib import messages
+
 class GoogleAuthCallbackView(APIView):
     """Handles Google OAuth callback and saves tokens."""
 
@@ -69,24 +72,21 @@ class GoogleAuthCallbackView(APIView):
         creds = get_google_credentials(auth_code, request)
 
         if creds is None:
-            return HttpResponse("Authentication failed.", status=400)
-        user = request.user
-        if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            user.google_access_token = creds.token
-            user.google_refresh_token = creds.refresh_token
-            user.google_token_expiry = timezone.make_aware(creds.expiry)
-            user.save()
+            messages.error(request, "Google authentication failed. Please try again.")
+            return redirect('home')
 
-        # Return a response that closes the popup and sends success message to parent window
-        html_content = """
-        <script>
-            window.opener.postMessage("google-auth-success", "*");
-            window.close(); // Close the popup
-        </script>
-        <p>Authentication successful! You can now close this window.</p>
-        """
-        return HttpResponse(html_content)
+        user = request.user
+        creds.refresh(Request())
+        user.google_access_token = creds.token
+        user.google_refresh_token = creds.refresh_token
+        user.google_token_expiry = timezone.make_aware(creds.expiry)
+        user.save()
+
+        # Store a success message in the session
+        messages.success(request, "Successfully authenticated with Google!")
+
+        return redirect('home')
+
 
 class GoogleSheetsView(APIView):
     """Fetches list of Google Sheets available for the user."""

@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home</title>
     <script>
-        // Function to open the Google authentication popup
-        async function openGoogleAuthPopup() {
+        // Function to start Google authentication
+        async function startGoogleAuth() {
             try {
                 let response = await fetch("{% url 'google-auth' %}", {
                     method: "GET",
@@ -23,39 +23,12 @@
                 let data = await response.json();
                 let authUrl = data.auth_url;
 
-                let popup = window.open(authUrl, "_blank", "width=500,height=600");
-
-                if (!popup) {
-                    alert("Please allow pop-ups to authenticate with Google.");
-                }
-
-                // Check for popup closure and authentication success
-                let popupCheckInterval = setInterval(() => {
-                    if (popup.closed) {
-                        clearInterval(popupCheckInterval);
-                        checkAuthStatus();
-                    }
-                }, 500);
+                // Redirect to Google authentication page
+                window.location.href = authUrl;
 
             } catch (error) {
                 console.error("Error:", error);
                 alert("Failed to start Google authentication.");
-            }
-        }
-
-        // Function to check authentication status
-        async function checkAuthStatus() {
-            try {
-                let response = await fetch("{% url 'google-sheets' %}");
-                if (response.ok) {
-                    alert("Google authentication successful!");
-                    document.getElementById("view-sheets").style.display = "block";
-                    fetchSheets();  // Fetch sheets after successful authentication
-                } else {
-                    alert("Google authentication failed. Please try again.");
-                }
-            } catch (error) {
-                console.error("Error checking auth status:", error);
             }
         }
 
@@ -82,7 +55,7 @@
                         dropdown.appendChild(option);
                     });
 
-                    // Show the dropdown if it's not already visible
+                    // Show the dropdown and fetch button
                     dropdown.style.display = "block";
                     document.getElementById("fetch-data-btn").style.display = "block";
                 } else {
@@ -126,15 +99,27 @@
 </head>
 <body>
     <h1>Welcome, {{ user.username }}!</h1>
+
+    <!-- Display success or error messages -->
+    {% if messages %}
+        <div id="messages">
+            {% for message in messages %}
+                <p style="color: {% if message.tags == 'success' %}green{% else %}red{% endif %};">
+                    {{ message }}
+                </p>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     <h2>Your Google Sheets:</h2>
 
-    <!-- Button to link Google Account -->
-    <button onclick="openGoogleAuthPopup()">Link Google Account</button>
-
-    <!-- List of sheets (Initially hidden) -->
-    <ul id="view-sheets" style="display: {% if user.google_access_token %}block{% else %}none{% endif %};">
-        <li><a href="{% url 'google-sheets' %}">View Sheets</a></li>
-    </ul>
+    {% if user.google_access_token %}
+        <!-- Show Fetch Sheets Button if authenticated -->
+        <button onclick="fetchSheets()">Fetch Sheets</button>
+    {% else %}
+        <!-- Show Link Google Account Button if not authenticated -->
+        <button onclick="startGoogleAuth()">Link Google Account</button>
+    {% endif %}
 
     <!-- Dropdown to select a sheet (Initially hidden) -->
     <select id="sheets-dropdown" style="display: none;" onchange="fetchSheetData()">
@@ -144,7 +129,7 @@
     <!-- Button to fetch data from the selected sheet -->
     <button id="fetch-data-btn" style="display: none;" onclick="fetchSheetData()">Fetch Data</button>
 
-    <!-- Form to log out -->
+    <!-- Logout Form -->
     <form method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <button type="submit">Logout</button>
