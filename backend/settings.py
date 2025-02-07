@@ -148,12 +148,21 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-GOOGLE_OAUTH_TOKEN_URI = 'https://oauth2.googleapis.com/token'
-GOOGLE_OAUTH_CLIENT_ID = '815284448432-fp5a4v84eu7r0m2q07rv0ctshqcp806k.apps.googleusercontent.com'
-GOOGLE_OAUTH_CLIENT_SECRET = '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'
+import os
+from dotenv import load_dotenv
 
-MICROSOFT_CLIENT_ID = "b88641d7-96c1-4605-8614-1159b7c63e53"
-MICROSOFT_CLIENT_SECRET = "uJO8Q~Sx-wMocRBb-W1MxuWmRlTRtfNKAA1fGajj"
+# Load environment variables from .env file
+load_dotenv()
+
+# Read values from environment variables
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID")
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+
+MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID")
+MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET")
+
+
+GOOGLE_OAUTH_TOKEN_URI = 'https://oauth2.googleapis.com/token'
 MICROSOFT_REDIRECT_URI = "http://localhost:8000/api/microsoft-auth/callback/"
 MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
 MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"

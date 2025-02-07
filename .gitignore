@@ -1,2 +1,3 @@
 client_secret.json
 db.sqlite3
+.env
