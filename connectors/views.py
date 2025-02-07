@@ -1,5 +1,8 @@
 # google_sheets/views.py
+import datetime
 from datetime import timedelta
+
+from google.auth.exceptions import GoogleAuthError
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -22,6 +25,9 @@ from rest_framework.permissions import IsAuthenticated
 from .google_auth import get_google_auth_url, get_google_credentials
 from .models import CustomUser
 from .forms import CustomUserCreationForm
+import requests
+from django.shortcuts import redirect, render
+from django.http import JsonResponse
 
 class SignUpView(TemplateView):
     template_name = 'connectors/signup.html'
@@ -60,6 +66,15 @@ class GooglePageView(LoginRequiredMixin, TemplateView):
         context['user'] = self.request.user  # Ensure user is available in the template context
         return context
 
+class MicrosoftPageView(LoginRequiredMixin, TemplateView):
+    template_name = 'connectors/microsoft.html'
+
+    def get_context_data(self, **kwargs):
+        # Pass the logged-in user to the context
+        context = super().get_context_data(**kwargs)
+        context['user'] = self.request.user  # Ensure user is available in the template context
+        return context
+
 class GoogleAuthView(APIView):
     """Generates Google OAuth URL for user authentication."""
     permission_classes = [IsAuthenticated]
@@ -71,122 +86,191 @@ class GoogleAuthView(APIView):
 from django.shortcuts import redirect
 from django.contrib import messages
 
-class GoogleAuthCallbackView(APIView):
-    """Handles Google OAuth callback and saves tokens."""
 
-    def get(self, request):
-        auth_code = request.GET.get("code")
+# Utility function to get valid Google token
+def get_valid_google_token(user):
+    if user.google_access_token and user.google_token_expiry and user.google_token_expiry > now():
+        return user.google_access_token
 
-        # Use the auth code to get credentials
-        creds = get_google_credentials(auth_code, request)
+    if not user.google_refresh_token:
+        return None  # No valid token available
 
-        if creds is None:
-            messages.error(request, "Google authentication failed. Please try again.")
-            return redirect('google')
-
-        user = request.user
-        creds.refresh(Request())
-        user.google_access_token = creds.token
-        user.google_refresh_token = creds.refresh_token
-        user.google_token_expiry = timezone.make_aware(creds.expiry)
-        user.save()
-
-        # Store a success message in the session
-        messages.success(request, "Successfully authenticated with Google!")
-
-        return redirect('google')
+    # Refresh token request
+    creds = Credentials(
+        token=user.google_access_token,
+        refresh_token=user.google_refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
+        client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
+    )
+    creds.refresh(Request())
+    user.google_access_token = creds.token
+    user.google_token_expiry = now() + datetime.timedelta(seconds=3600)
+    user.save()
+    return creds.token
 
 
-class GoogleSheetsView(APIView):
-    """Fetches list of Google Sheets available for the user."""
+def google_login(request):
+    if request.user.google_access_token:
+        # If the user already has an access token, redirect them to the Google Sheets page or show a message
+        return redirect("google-sheets")  # Adjust this to the page where you show Google Sheets, or show a message
 
-    permission_classes = [IsAuthenticated]
+    auth_url = get_google_auth_url(request)
+    return redirect(auth_url)
 
-    def get(self, request):
-        user = request.user
+# Google OAuth Callback
+def google_auth_callback(request):
+    code = request.GET.get("code")
+    if not code:
+        return JsonResponse({"error": "No authorization code received"}, status=400)
 
-        # Ensure the user has stored tokens
-        if not user.google_access_token or not user.google_refresh_token or not user.google_token_expiry:
-            return Response({"error": "Google authentication required."}, status=401)
+    try:
+        credentials = get_google_credentials(code, request)
+    except Exception as e:
+        return JsonResponse({"error": f"Failed to fetch credentials: {str(e)}"}, status=400)
 
-        # Refresh token logic (if token expired)
-        if user.google_token_expiry <= now():
-            return Response({"error": "Google token expired. Please re-authenticate."}, status=401)
+    user = request.user
+    user.google_access_token = credentials.token
+    user.google_refresh_token = credentials.refresh_token
+    user.google_token_expiry = credentials.expiry
+    user.save()
 
-        # Load credentials from user model
-        creds = Credentials(
-            token=user.google_access_token,
-            refresh_token=user.google_refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
-            client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET
-        )
-
-        try:
-            service = build("drive", "v3", credentials=creds)  # Use Google Drive API to list files
-            sheet_list = []
-
-            # List all files (including spreadsheets) in the user's Google Drive
-            results = service.files().list(q="mimeType='application/vnd.google-apps.spreadsheet'",
-                                           fields="files(id, name)").execute()
-            files = results.get("files", [])
-
-            for file in files:
-                sheet_list.append({
-                    "sheet_id": file["id"],
-                    "title": file["name"]
-                })
-
-            return Response({"sheets": sheet_list})
-
-        except HttpError as err:
-            return Response({"error": str(err)}, status=400)
+    return redirect("google-sheets")
 
 
+# Fetch Google Sheets API
+def google_fetch_sheets(request):
+    user = request.user
+    access_token = get_valid_google_token(user)
+    if not access_token:
+        return redirect("google_login")
+
+    creds = Credentials(token=access_token)
+    try:
+        service = build("drive", "v3", credentials=creds)
+        results = service.files().list(q="mimeType='application/vnd.google-apps.spreadsheet'",
+                                       fields="files(id, name)").execute()
+        files = results.get("files", [])
+        sheets = [{"sheet_id": f["id"], "title": f["name"]} for f in files]
+        return render(request, "connectors/google.html", {"sheets": sheets})
+    except GoogleAuthError as err:
+        return JsonResponse({"error": str(err)}, status=400)
+
+
+# Fetch Data from a Google Sheet
 class GoogleSheetDataView(APIView):
-    """Fetches data from the selected Google Sheet."""
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Get the selected spreadsheet_id from the query params
         spreadsheet_id = request.GET.get("spreadsheet_id")
-
-        # Ensure the user has stored tokens
         user = request.user
-        if not user.google_access_token or not user.google_refresh_token or not user.google_token_expiry:
+        access_token = get_valid_google_token(user)
+        if not access_token:
             return Response({"error": "Google authentication required."}, status=401)
 
-        # Refresh token logic (if token expired)
-        if user.google_token_expiry <= now():
-            return Response({"error": "Google token expired. Please re-authenticate."}, status=401)
-
-        # Load credentials from user model
-        creds = Credentials(
-            token=user.google_access_token,
-            refresh_token=user.google_refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
-            client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET
-        )
-
+        creds = Credentials(token=access_token)
         try:
-            # Build the Sheets API service
-            sheets_service = build("sheets", "v4", credentials=creds)
-
-            # Fetch data from the specified Google Sheet
-            range_ = "Sheet1"  # You can modify this if you want specific range like "Sheet1!A1:Z100"
-            result = sheets_service.spreadsheets().values().get(
-                spreadsheetId=spreadsheet_id, range=range_
-            ).execute()
+            service = build("sheets", "v4", credentials=creds)
+            result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range="Sheet1").execute()
             rows = result.get("values", [])
-
-            # If the sheet is empty
-            if not rows:
-                return Response({"message": "No data found in the selected sheet."})
-
-            # Return the rows in the sheet
-            return Response({"data": rows})
-
-        except HttpError as err:
+            return Response({"data": rows if rows else "No data found."})
+        except GoogleAuthError as err:
             return Response({"error": str(err)}, status=400)
+
+# Step 1: Redirect to Microsoft Login
+def microsoft_login(request):
+    if request.user.microsoft_access_token:  # Check if the user already has a Microsoft access token
+        # If the user already has an access token, redirect them to the Microsoft-related page
+        return redirect(
+            "microsoft_fetch_excel")  # Adjust this to the page where you show Microsoft Excel, or show a message
+
+    auth_url = (
+        f"{settings.MICROSOFT_AUTH_URL}?"
+        f"client_id={settings.MICROSOFT_CLIENT_ID}"
+        f"&response_type=code"
+        f"&redirect_uri={settings.MICROSOFT_REDIRECT_URI}"
+        f"&scope=openid User.Read Files.Read offline_access"
+        f"&response_mode=query"
+    )
+    return redirect(auth_url)
+
+# Step 2: Handle Callback & Exchange Code for Token
+def microsoft_auth_callback(request):
+    code = request.GET.get("code")
+    if not code:
+        return JsonResponse({"error": "No authorization code received"}, status=400)
+
+    data = {
+        "client_id": settings.MICROSOFT_CLIENT_ID,
+        "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+        "grant_type": "authorization_code",
+    }
+
+    response = requests.post(settings.MICROSOFT_TOKEN_URL, data=data)
+    token_data = response.json()
+
+    if "access_token" not in token_data:
+        return JsonResponse({"error": "Failed to get access token", "details": token_data}, status=400)
+
+    # Store tokens in the database
+    user = request.user
+    user.microsoft_access_token = token_data["access_token"]
+    user.microsoft_refresh_token = token_data.get("refresh_token", "")
+    expires_in = token_data.get("expires_in", 3600)  # Default expiry to 1 hour if not provided
+    user.microsoft_token_expiry = now() + datetime.timedelta(seconds=expires_in)
+    user.save()
+
+    return redirect("microsoft_fetch_excel")
+
+# Step 3: Fetch Excel Files from OneDrive
+@login_required
+def microsoft_fetch_excel(request):
+    user = request.user
+    access_token = get_valid_microsoft_token(user)
+
+    if not access_token:
+        return redirect("microsoft_login")
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    url = f"{settings.GRAPH_API_BASE_URL}/me/drive/root/children"
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return JsonResponse({"error": "Failed to fetch files", "details": response.json()}, status=response.status_code)
+
+    files = response.json().get("value", [])
+    excel_files = [
+        {"name": f["name"], "download_url": f.get("@microsoft.graph.downloadUrl", "#")}
+        for f in files if f["name"].endswith(".xlsx")
+    ]
+
+    return render(request, "connectors/microsoft.html", {"files": excel_files})
+
+def get_valid_microsoft_token(user):
+    if user.microsoft_access_token and user.microsoft_token_expiry and user.microsoft_token_expiry > now():
+        return user.microsoft_access_token
+
+    if not user.microsoft_refresh_token:
+        return None  # No valid token available
+
+    # Refresh token request
+    data = {
+        "client_id": settings.MICROSOFT_CLIENT_ID,
+        "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+        "refresh_token": user.microsoft_refresh_token,
+        "grant_type": "refresh_token",
+    }
+    response = requests.post(settings.MICROSOFT_TOKEN_URL, data=data)
+    token_data = response.json()
+
+    if "access_token" in token_data:
+        user.microsoft_access_token = token_data["access_token"]
+        user.microsoft_refresh_token = token_data.get("refresh_token", user.microsoft_refresh_token)
+        expires_in = token_data.get("expires_in", 3600)
+        user.microsoft_token_expiry = now() + datetime.timedelta(seconds=expires_in)
+        user.save()
+        return token_data["access_token"]
+
+    return None  # Token refresh failed

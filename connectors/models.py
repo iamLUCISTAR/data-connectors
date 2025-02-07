@@ -5,6 +5,11 @@ class CustomUser(AbstractUser):
     google_access_token = models.TextField(blank=True, null=True)
     google_refresh_token = models.TextField(blank=True, null=True)
     google_token_expiry = models.DateTimeField(blank=True, null=True)
+
+    microsoft_access_token = models.TextField(blank=True, null=True)
+    microsoft_refresh_token = models.TextField(blank=True, null=True)
+    microsoft_token_expiry = models.DateTimeField(blank=True, null=True)
+
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='customuser_groups',  # Add related_name to avoid clash

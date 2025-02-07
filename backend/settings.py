@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-+3$)$-ys!4&==+a8al8h6mvb(8!$v278k&iguffai#fp((+vvo
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1']
+ALLOWED_HOSTS = ['127.0.0.1','localhost']
 
 AUTH_USER_MODEL = 'connectors.CustomUser'
 # Application definition
@@ -151,6 +151,13 @@ AUTH_PASSWORD_VALIDATORS = [
 GOOGLE_OAUTH_TOKEN_URI = 'https://oauth2.googleapis.com/token'
 GOOGLE_OAUTH_CLIENT_ID = '815284448432-fp5a4v84eu7r0m2q07rv0ctshqcp806k.apps.googleusercontent.com'
 GOOGLE_OAUTH_CLIENT_SECRET = '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'
+
+MICROSOFT_CLIENT_ID = "b88641d7-96c1-4605-8614-1159b7c63e53"
+MICROSOFT_CLIENT_SECRET = "uJO8Q~Sx-wMocRBb-W1MxuWmRlTRtfNKAA1fGajj"
+MICROSOFT_REDIRECT_URI = "http://localhost:8000/api/microsoft-auth/callback/"
+MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 LOGIN_REDIRECT_URL = 'landing'
 LOGIN_URL = '/api/login/'

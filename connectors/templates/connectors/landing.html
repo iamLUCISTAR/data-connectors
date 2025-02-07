@@ -20,17 +20,31 @@
         .nav-links {
             margin-top: 20px;
         }
-        .nav-links a {
+        .nav-links a, .logout-btn {
             display: block;
             padding: 10px;
-            margin: 10px;
+            margin: 10px auto;
+            width: 250px;
             background: #007bff;
             color: white;
             text-decoration: none;
             border-radius: 5px;
+            text-align: center;
         }
         .nav-links a:hover {
             background: #0056b3;
+        }
+        .logout-form {
+            margin-top: 20px;
+        }
+        .logout-btn {
+            background: #dc3545;
+            border: none;
+            cursor: pointer;
+            width: 250px;
+        }
+        .logout-btn:hover {
+            background: #a71d2a;
         }
     </style>
 </head>
@@ -41,10 +55,16 @@
         <p>This application allows you to connect and manage various data sources seamlessly.</p>
 
         <div class="nav-links">
-            <a href="{% url 'google' %}">Connect Google Sheets</a>
-            <a href="#">[Future Connection 1]</a>
+            <a href="{% url 'google-login' %}">Connect Google Sheets</a>
+            <a href="{% url 'microsoft_login' %}">Connect Microsoft Excel</a>
             <a href="#">[Future Connection 2]</a>
         </div>
+
+        <!-- Logout Form -->
+        <form method="post" action="{% url 'logout' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="logout-btn">Logout</button>
+        </form>
     </div>
 
 </body>

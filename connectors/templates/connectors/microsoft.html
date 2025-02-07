@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Sheets Integration</title>
+    <title>Microsoft Excel Files</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -37,7 +37,7 @@
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        h1, h2 {
+        h1 {
             color: #333;
         }
         .btn {
@@ -55,6 +55,24 @@
         .btn:hover {
             background: #005ea6;
         }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background: #eee;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+        }
+        a {
+            text-decoration: none;
+            color: #0078D4;
+            font-weight: bold;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
         .logout-form {
             display: inline;
             margin-left: 20px;
@@ -71,35 +89,7 @@
         .logout-btn:hover {
             background: #a71d2a;
         }
-        select {
-            padding: 10px;
-            margin-top: 10px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            font-size: 16px;
-        }
-        #sheet-data {
-            margin-top: 20px;
-            padding: 10px;
-            background: #e9f5ff;
-            border-radius: 5px;
-            text-align: left;
-        }
-        .message {
-            padding: 10px;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-        }
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-        }
     </style>
-
 </head>
 <body>
 
@@ -109,7 +99,7 @@
         <a href="{% url 'google-login' %}">Google Sheets</a>
         <a href="{% url 'microsoft_login' %}">Microsoft Excel</a>
 
-        <!-- Logout Form -->
+        <!-- Logout Form (Django's built-in LogoutView) -->
         <form method="post" action="{% url 'logout' %}" class="logout-form">
             {% csrf_token %}
             <button type="submit" class="logout-btn">Logout</button>
@@ -117,34 +107,28 @@
     </div>
 
     <div class="container">
-        <h1>Welcome, {{ user.username }}!</h1>
+        <h1>Microsoft Excel Files</h1>
 
-        {% if messages %}
-            <div id="messages">
-                {% for message in messages %}
-                    <p class="message {% if message.tags == 'success' %}success{% else %}error{% endif %}">
-                        {{ message }}
-                    </p>
-                {% endfor %}
-            </div>
-        {% endif %}
-
-        <h2>Your Google Sheets:</h2>
-
-        {% if user.google_access_token %}
+        {% if files %}
             <ul>
-                {% for sheet in sheets %}
+                {% for file in files %}
                     <li>
-                        <strong>{{ sheet.title }}</strong> -
-                        <a href="https://docs.google.com/spreadsheets/d/{{ sheet.sheet_id }}/edit" target="_blank">Open Sheet</a>
+                        <a href="{{ file.download_url }}" target="_blank">
+                            {{ file.name }}
+                        </a>
                     </li>
                 {% endfor %}
             </ul>
         {% else %}
-            <button class="btn" onclick="startGoogleAuth()">Link Google Account</button>
+            <p>No Excel files found.</p>
         {% endif %}
 
-        <div id="sheet-data"></div>
+        {% if not user.microsoft_access_token %}
+            <a href="{% url 'microsoft_login' %}" class="btn">Login with Microsoft</a>
+        {% else %}
+            <p>You're authenticated with Microsoft.</p>
+<!--            <a href="{% url 'microsoft_login' %}" class="btn">Reauthenticate</a>-->
+        {% endif %}
     </div>
 
 </body>
