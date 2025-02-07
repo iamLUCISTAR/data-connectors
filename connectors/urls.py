@@ -10,11 +10,13 @@ urlpatterns = [
     path('google/login/', google.google_login, name='google-login'),
     path('google/callback/', google.google_auth_callback, name='google-callback'),
     path('google/sheets/', google.google_fetch_sheets, name='google-sheets'),
-    path('google/sheet-data/', google.GoogleSheetDataView.as_view(), name='google-sheet-data'),
+    path('google/sheet-data/', google.google_fetch_sheet_data, name='google-sheet-data'),
 
     path("microsoft-auth/login/", microsoft.microsoft_login, name="microsoft_login"),
     path("microsoft-auth/callback/", microsoft.microsoft_auth_callback, name="microsoft_auth_callback"),
     path("microsoft-auth/excel-files/", microsoft.microsoft_fetch_excel, name="microsoft_fetch_excel"),
+    path("microsoft-fetch-excel-data/", microsoft.microsoft_fetch_excel_data, name="microsoft_fetch_excel_data"),
+
 
     # User Authentication URLs (Login, Signup)
     path('login/', auth_views.LoginView.as_view(), name='login'),

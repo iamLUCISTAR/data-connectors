@@ -67,38 +67,65 @@ def google_auth_callback(request):
 
     return redirect("google-sheets")
 
+
 def google_fetch_sheets(request):
+    """ Fetch list of Google Sheets from user's Google Drive """
     user = request.user
     access_token = get_valid_google_token(user)
+
     if not access_token:
         return redirect("google_login")
 
     creds = Credentials(token=access_token)
+
     try:
         service = build("drive", "v3", credentials=creds)
-        results = service.files().list(q="mimeType='application/vnd.google-apps.spreadsheet'",
-                                       fields="files(id, name)").execute()
+        results = service.files().list(
+            q="mimeType='application/vnd.google-apps.spreadsheet'",
+            fields="files(id, name)",
+            pageSize=100
+        ).execute()
+
         files = results.get("files", [])
         sheets = [{"sheet_id": f["id"], "title": f["name"]} for f in files]
+
+        # Return JSON if requested (useful for frontend AJAX)
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"sheets": sheets})
+
         return render(request, "connectors/google.html", {"sheets": sheets})
+
     except GoogleAuthError as err:
-        return JsonResponse({"error": str(err)}, status=400)
+        return JsonResponse({"error": f"Google authentication error: {err}"}, status=401)
+    except Exception as e:
+        return JsonResponse({"error": f"An error occurred: {str(e)}"}, status=500)
 
-class GoogleSheetDataView(APIView):
-    permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        spreadsheet_id = request.GET.get("spreadsheet_id")
-        user = request.user
-        access_token = get_valid_google_token(user)
-        if not access_token:
-            return Response({"error": "Google authentication required."}, status=401)
+def google_fetch_sheet_data(request):
+    """Fetch data from a selected Google Sheet"""
+    spreadsheet_id = request.GET.get("spreadsheet_id")
 
-        creds = Credentials(token=access_token)
-        try:
-            service = build("sheets", "v4", credentials=creds)
-            result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range="Sheet1").execute()
-            rows = result.get("values", [])
-            return Response({"data": rows if rows else "No data found."})
-        except GoogleAuthError as err:
-            return Response({"error": str(err)}, status=400)
+    if not spreadsheet_id:
+        return Response({"error": "Missing spreadsheet_id parameter."}, status=400)
+
+    user = request.user
+    access_token = get_valid_google_token(user)
+
+    if not access_token:
+        return Response({"error": "Google authentication required."}, status=401)
+
+    creds = Credentials(token=access_token)
+
+    try:
+        service = build("sheets", "v4", credentials=creds)
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id, range="Sheet1"
+        ).execute()
+
+        rows = result.get("values", [])
+        return JsonResponse({"data": rows if rows else "No data found."})
+
+    except GoogleAuthError as err:
+        return JsonResponse({"error": f"Google authentication error: {err}"}, status=401)
+    except Exception as e:
+        return JsonResponse({"error": f"Failed to fetch sheet data: {str(e)}"}, status=500)

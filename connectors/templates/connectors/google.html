@@ -30,7 +30,7 @@
             border-radius: 5px;
         }
         .container {
-            max-width: 600px;
+            max-width: 700px;
             margin: 50px auto;
             background: white;
             padding: 20px;
@@ -84,6 +84,17 @@
             background: #e9f5ff;
             border-radius: 5px;
             text-align: left;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
         }
         .message {
             padding: 10px;
@@ -99,7 +110,54 @@
             color: #721c24;
         }
     </style>
+    <script>
+        async function fetchSheetData(sheetId) {
+            if (!sheetId) {
+                document.getElementById("sheet-data").innerHTML = "<p style='color:red;'>Please select a sheet.</p>";
+                return;
+            }
 
+            document.getElementById("sheet-data").innerHTML = "<p>Loading...</p>";
+
+            try {
+                let response = await fetch(`/api/google/sheet-data/?spreadsheet_id=${sheetId}`);
+                let data = await response.json();
+
+                let sheetDataDiv = document.getElementById("sheet-data");
+                sheetDataDiv.innerHTML = ""; // Clear previous data
+
+                if (data.error) {
+                    sheetDataDiv.innerHTML = `<p style="color: red;">${data.error}</p>`;
+                    return;
+                }
+
+                if (!data.data.length) {
+                    sheetDataDiv.innerHTML = "<p>No data found in this sheet.</p>";
+                    return;
+                }
+
+                // Convert rows to a table format
+                let table = "<table>";
+                data.data.forEach((row, index) => {
+                    table += "<tr>";
+                    row.forEach(cell => {
+                        if (index === 0) {
+                            table += `<th>${cell}</th>`; // Header row
+                        } else {
+                            table += `<td>${cell}</td>`;
+                        }
+                    });
+                    table += "</tr>";
+                });
+                table += "</table>";
+
+                sheetDataDiv.innerHTML = table;
+            } catch (error) {
+                console.error("Error fetching sheet data:", error);
+                document.getElementById("sheet-data").innerHTML = "<p style='color: red;'>Failed to fetch data.</p>";
+            }
+        }
+    </script>
 </head>
 <body>
 
@@ -132,16 +190,19 @@
         <h2>Your Google Sheets:</h2>
 
         {% if user.google_access_token %}
-            <ul>
-                {% for sheet in sheets %}
-                    <li>
-                        <strong>{{ sheet.title }}</strong> -
-                        <a href="https://docs.google.com/spreadsheets/d/{{ sheet.sheet_id }}/edit" target="_blank">Open Sheet</a>
-                    </li>
-                {% endfor %}
-            </ul>
+            {% if sheets %}
+                <label for="sheets">Select a Sheet:</label>
+                <select id="sheets" onchange="fetchSheetData(this.value)">
+                    <option value="">-- Select --</option>
+                    {% for sheet in sheets %}
+                        <option value="{{ sheet.sheet_id }}">{{ sheet.title }}</option>
+                    {% endfor %}
+                </select>
+            {% else %}
+                <p>No Google Sheets found.</p>
+            {% endif %}
         {% else %}
-            <button class="btn" onclick="startGoogleAuth()">Link Google Account</button>
+            <button class="btn" onclick="window.location.href='{% url 'google-login' %}'">Link Google Account</button>
         {% endif %}
 
         <div id="sheet-data"></div>

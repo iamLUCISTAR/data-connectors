@@ -30,7 +30,7 @@
             border-radius: 5px;
         }
         .container {
-            max-width: 600px;
+            max-width: 800px;
             margin: 50px auto;
             background: white;
             padding: 20px;
@@ -55,23 +55,30 @@
         .btn:hover {
             background: #005ea6;
         }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
-            background: #eee;
+        select {
             padding: 10px;
-            margin: 5px 0;
+            width: 100%;
+            font-size: 16px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
             border-radius: 5px;
         }
-        a {
-            text-decoration: none;
-            color: #0078D4;
-            font-weight: bold;
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
         }
-        a:hover {
-            text-decoration: underline;
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #0078D4;
+            color: white;
         }
         .logout-form {
             display: inline;
@@ -99,7 +106,7 @@
         <a href="{% url 'google-login' %}">Google Sheets</a>
         <a href="{% url 'microsoft_login' %}">Microsoft Excel</a>
 
-        <!-- Logout Form (Django's built-in LogoutView) -->
+        <!-- Logout Form -->
         <form method="post" action="{% url 'logout' %}" class="logout-form">
             {% csrf_token %}
             <button type="submit" class="logout-btn">Logout</button>
@@ -110,26 +117,72 @@
         <h1>Microsoft Excel Files</h1>
 
         {% if files %}
-            <ul>
+            <label for="file-select">Select an Excel File:</label>
+            <select id="file-select" onchange="fetchExcelData(this.value)">
+                <option value="">-- Select a file --</option>
                 {% for file in files %}
-                    <li>
-                        <a href="{{ file.download_url }}" target="_blank">
-                            {{ file.name }}
-                        </a>
-                    </li>
+                    <option value="{{ file.id }}">{{ file.name }}</option>
                 {% endfor %}
-            </ul>
+            </select>
         {% else %}
             <p>No Excel files found.</p>
         {% endif %}
+
+        <table id="excel-data-table">
+            <!-- Data will be inserted here -->
+        </table>
 
         {% if not user.microsoft_access_token %}
             <a href="{% url 'microsoft_login' %}" class="btn">Login with Microsoft</a>
         {% else %}
             <p>You're authenticated with Microsoft.</p>
-<!--            <a href="{% url 'microsoft_login' %}" class="btn">Reauthenticate</a>-->
         {% endif %}
     </div>
+
+    <script>
+        async function fetchExcelData(fileId) {
+            if (!fileId) {
+                document.getElementById("excel-data-table").innerHTML = "";
+                return;
+            }
+
+            try {
+                let response = await fetch(`/api/microsoft-fetch-excel-data/?file_id=${fileId}`);
+                let data = await response.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                let table = document.getElementById("excel-data-table");
+                table.innerHTML = "";
+
+                let headers = Object.keys(data.data[0]);
+                let headerRow = document.createElement("tr");
+
+                headers.forEach(header => {
+                    let th = document.createElement("th");
+                    th.textContent = header;
+                    headerRow.appendChild(th);
+                });
+
+                table.appendChild(headerRow);
+
+                data.data.forEach(row => {
+                    let tr = document.createElement("tr");
+                    headers.forEach(header => {
+                        let td = document.createElement("td");
+                        td.textContent = row[header];
+                        tr.appendChild(td);
+                    });
+                    table.appendChild(tr);
+                });
+            } catch (error) {
+                console.error("Error fetching Excel data:", error);
+            }
+        }
+    </script>
 
 </body>
 </html>

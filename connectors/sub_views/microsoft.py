@@ -6,7 +6,34 @@ from django.contrib.auth.decorators import login_required
 import requests
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
+import pandas as pd
+from io import BytesIO
 
+def get_valid_microsoft_token(user):
+    if user.microsoft_access_token and user.microsoft_token_expiry and user.microsoft_token_expiry > now():
+        return user.microsoft_access_token
+
+    if not user.microsoft_refresh_token:
+        return None
+
+    data = {
+        "client_id": settings.MICROSOFT_CLIENT_ID,
+        "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+        "refresh_token": user.microsoft_refresh_token,
+        "grant_type": "refresh_token",
+    }
+    response = requests.post(settings.MICROSOFT_TOKEN_URL, data=data)
+    token_data = response.json()
+
+    if "access_token" in token_data:
+        user.microsoft_access_token = token_data["access_token"]
+        user.microsoft_refresh_token = token_data.get("refresh_token", user.microsoft_refresh_token)
+        expires_in = token_data.get("expires_in", 3600)
+        user.microsoft_token_expiry = now() + datetime.timedelta(seconds=expires_in)
+        user.save()
+        return token_data["access_token"]
+
+    return None
 
 def microsoft_login(request):
     if request.user.microsoft_access_token:
@@ -67,35 +94,43 @@ def microsoft_fetch_excel(request):
         return JsonResponse({"error": "Failed to fetch files", "details": response.json()}, status=response.status_code)
 
     files = response.json().get("value", [])
+
+    # Include file ID in response
     excel_files = [
-        {"name": f["name"], "download_url": f.get("@microsoft.graph.downloadUrl", "#")}
+        {"id": f["id"], "name": f["name"], "download_url": f.get("@microsoft.graph.downloadUrl", "#")}
         for f in files if f["name"].endswith(".xlsx")
     ]
 
     return render(request, "connectors/microsoft.html", {"files": excel_files})
 
-def get_valid_microsoft_token(user):
-    if user.microsoft_access_token and user.microsoft_token_expiry and user.microsoft_token_expiry > now():
-        return user.microsoft_access_token
+@login_required
+def microsoft_fetch_excel_data(request):
+    """Fetches data from a selected Excel file in OneDrive."""
+    user = request.user
+    access_token = get_valid_microsoft_token(user)
 
-    if not user.microsoft_refresh_token:
-        return None
+    if not access_token:
+        return redirect("microsoft_login")
 
-    data = {
-        "client_id": settings.MICROSOFT_CLIENT_ID,
-        "client_secret": settings.MICROSOFT_CLIENT_SECRET,
-        "refresh_token": user.microsoft_refresh_token,
-        "grant_type": "refresh_token",
-    }
-    response = requests.post(settings.MICROSOFT_TOKEN_URL, data=data)
-    token_data = response.json()
+    file_id = request.GET.get("file_id")
+    if not file_id:
+        return JsonResponse({"error": "File ID is required"}, status=400)
 
-    if "access_token" in token_data:
-        user.microsoft_access_token = token_data["access_token"]
-        user.microsoft_refresh_token = token_data.get("refresh_token", user.microsoft_refresh_token)
-        expires_in = token_data.get("expires_in", 3600)
-        user.microsoft_token_expiry = now() + datetime.timedelta(seconds=expires_in)
-        user.save()
-        return token_data["access_token"]
+    # Microsoft Graph API URL to download the file
+    url = f"{settings.GRAPH_API_BASE_URL}/me/drive/items/{file_id}/content"
+    headers = {"Authorization": f"Bearer {access_token}"}
 
-    return None
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return JsonResponse({"error": "Failed to download file", "details": response.json()}, status=response.status_code)
+
+    # Read Excel data
+    try:
+        excel_data = BytesIO(response.content)
+        df = pd.read_excel(excel_data, sheet_name=0)  # Read first sheet
+        data = df.to_dict(orient="records")  # Convert to JSON-friendly format
+    except Exception as e:
+        print(str(e))
+        return JsonResponse({"error": "Error reading Excel file", "details": str(e)}, status=500)
+
+    return JsonResponse({"data": data})
